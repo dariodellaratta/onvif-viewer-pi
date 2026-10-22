@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""nmcli finto: registra i comandi e restituisce output plausibili."""
+import os, sys
+a = sys.argv[1:]
+log = os.environ["FAKE_NMCLI_LOG"]
+with open(log, "a") as f:
+    f.write(" ".join(repr(x) for x in a) + "\n")
+s = " ".join(a)
+if "device status" in s:
+    print("eth0:ethernet:connected:Wired connection 1\nwlan0:wifi:disconnected:\nlo:loopback:unmanaged:")
+elif "device show eth0" in s:
+    print("IP4.ADDRESS[1]:192.168.1.23/24\nIP4.GATEWAY:192.168.1.1\nIP4.DNS[1]:192.168.1.1\nGENERAL.HWADDR:DC:A6:32:00:00:01")
+elif "device show" in s:
+    print("GENERAL.HWADDR:DC:A6:32:00:00:02")
+elif s.endswith("connection show"):
+    print("Wired connection 1:802-3-ethernet")
+elif "connection.interface-name" in s:
+    print("connection.interface-name:eth0")
+elif "connection show" in s:
+    print("ipv4.method:auto\nipv4.addresses:\nipv4.gateway:\nipv4.dns:")
+elif "general hostname" in s and len(a) == 2:
+    print("raspberrypi")

@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONVIF Viewer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header>
+  <h1>ONVIF Viewer</h1>
+  <nav>
+    <a href="#stato" data-tab="stato">Stato</a>
+    <a href="#telecamera" data-tab="telecamera">Telecamera</a>
+    <a href="#rete" data-tab="rete">Rete</a>
+    <a href="#sistema" data-tab="sistema">Sistema</a>
+  </nav>
+  <a class="logout" href="{{ url_for('logout') }}">Esci</a>
+</header>
+
+<main>
+{% if default_password %}
+  <div class="alert warn">Stai usando la password iniziale <b>admin</b>. Cambiala in <a href="#sistema">Sistema</a>.</div>
+{% endif %}
+
+<!-- ============ STATO ============ -->
+<section id="stato">
+  <div class="card">
+    <h2>Stato</h2>
+    <dl class="kv" id="status"><dt>Caricamento…</dt><dd></dd></dl>
+    <div class="row">
+      <button onclick="loadSnapshot()">Mostra anteprima</button>
+      <button onclick="api('/api/player/restart', {}).then(() => msg('st-msg', 'ok', 'Player riavviato'))">Riavvia player</button>
+    </div>
+    <div id="st-msg"></div>
+    <img id="snap" class="snap" alt="" hidden>
+  </div>
+</section>
+
+<!-- ============ TELECAMERA ============ -->
+<section id="telecamera">
+  <div class="card">
+    <h2>1 · Trova la telecamera</h2>
+    <p class="muted">Cerca i dispositivi ONVIF sulla rete locale, oppure inserisci l'indirizzo a mano qui sotto.</p>
+    <button id="btn-discover" onclick="doDiscover()">Cerca telecamere</button>
+    <div id="disc-msg"></div>
+    <table id="disc-table" hidden>
+      <thead><tr><th>IP</th><th>Porta</th><th>Nome</th><th>Modello</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>2 · Credenziali ONVIF</h2>
+    <div class="grid">
+      <label>Indirizzo IP<input id="c-host" value="{{ cam.host }}" placeholder="192.168.1.64"></label>
+      <label>Porta ONVIF<input id="c-port" type="number" value="{{ cam.port or 80 }}"></label>
+      <label>Utente<input id="c-user" value="{{ cam.username }}" autocomplete="off"></label>
+      <label>Password<input id="c-pass" type="password" autocomplete="new-password"
+        placeholder="{{ 'lascia vuoto per non cambiarla' if cam.password else '' }}"></label>
+    </div>
+    <div class="row"><button id="btn-profiles" onclick="doProfiles()">Connetti e leggi profili</button></div>
+    <div id="prof-msg"></div>
+    <dl class="kv" id="dev-info" hidden></dl>
+  </div>
+
+  <div class="card">
+    <h2>3 · Profilo video e visualizzazione</h2>
+    <label>Profilo
+      <select id="c-profile">
+        {% if cam.profile_token %}<option value="{{ cam.profile_token }}">{{ cam.profile_name }} (attuale)</option>{% else %}<option value="">— connetti prima la telecamera —</option>{% endif %}
+      </select>
+    </label>
+    <div class="grid">
+      <label>Trasporto RTSP
+        <select id="p-transport">
+          <option value="tcp" {{ 'selected' if player.transport != 'udp' }}>TCP (consigliato)</option>
+          <option value="udp" {{ 'selected' if player.transport == 'udp' }}>UDP</option>
+        </select>
+      </label>
+      <label>Rotazione
+        <select id="p-rotate">
+          {% for r in [0, 90, 180, 270] %}<option value="{{ r }}" {{ 'selected' if player.rotate == r }}>{{ r }}°</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <label class="check"><input type="checkbox" id="p-lowlat" {{ 'checked' if player.low_latency }}> Bassa latenza</label>
+    <label class="check"><input type="checkbox" id="p-aspect" {{ 'checked' if player.keep_aspect }}> Mantieni proporzioni (bande nere)</label>
+    <label class="check"><input type="checkbox" id="p-audio" {{ 'checked' if player.audio }}> Audio su HDMI</label>
+    <details {{ 'open' if cam.manual_rtsp }}>
+      <summary>URL RTSP manuale (salta ONVIF)</summary>
+      <label>URL completo<input id="c-manual" value="{{ cam.manual_rtsp }}" placeholder="rtsp://utente:password@192.168.1.64:554/stream1"></label>
+    </details>
+    <div class="row">
+      <button class="primary" id="btn-save" onclick="doSave()">Salva e mostra a monitor</button>
+      <button class="danger" onclick="doClear()">Rimuovi telecamera</button>
+    </div>
+    <div id="save-msg"></div>
+  </div>
+</section>
+
+<!-- ============ RETE ============ -->
+<section id="rete">
+  <div class="card">
+    <h2>Rete del Raspberry</h2>
+    <div id="net-msg"></div>
+    <label>Interfaccia <select id="n-dev" onchange="fillNet()"></select></label>
+    <dl class="kv" id="net-now"></dl>
+    <label>Modalità
+      <select id="n-method" onchange="toggleStatic()">
+        <option value="auto">DHCP (automatico)</option>
+        <option value="manual">IP statico</option>
+      </select>
+    </label>
+    <div class="grid" id="n-static">
+      <label>Indirizzo / prefisso<input id="n-addr" placeholder="192.168.1.50/24"></label>
+      <label>Gateway<input id="n-gw" placeholder="192.168.1.1"></label>
+      <label>DNS (separati da spazio)<input id="n-dns" placeholder="192.168.1.1 8.8.8.8"></label>
+    </div>
+    <div class="row"><button class="primary" id="btn-net" onclick="doNet()">Applica</button></div>
+    <p class="muted">Dopo aver applicato, la pagina va riaperta al nuovo indirizzo. Se lo perdi, l'indirizzo corrente è sempre scritto sul monitor quando non c'è una telecamera configurata.</p>
+  </div>
+  <div class="card">
+    <h2>Nome host</h2>
+    <div class="row">
+      <input id="n-host" style="flex:1">
+      <button onclick="doHostname()">Salva</button>
+    </div>
+    <div id="host-msg"></div>
+  </div>
+</section>
+
+<!-- ============ SISTEMA ============ -->
+<section id="sistema">
+  <div class="card">
+    <h2>Password dell'interfaccia web</h2>
+    <p class="muted">Utente: <b>{{ web_user }}</b></p>
+    <div class="grid">
+      <label>Password attuale<input id="pw-cur" type="password" autocomplete="current-password"></label>
+      <label>Nuova password<input id="pw-new" type="password" autocomplete="new-password"></label>
+    </div>
+    <div class="row"><button class="primary" onclick="doPassword()">Cambia password</button></div>
+    <div id="pw-msg"></div>
+  </div>
+  <div class="card">
+    <h2>Sistema</h2>
+    <div class="row">
+      <button class="danger" onclick="if (confirm('Riavviare il Raspberry?')) api('/api/reboot', {}).then(() => msg('sys-msg', 'ok', 'Riavvio in corso…'))">Riavvia Raspberry</button>
+    </div>
+    <div id="sys-msg"></div>
+    <p class="muted">Versione {{ version }}</p>
+  </div>
+</section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let netDevices = [];
+
+function msg(id, kind, text) { $(id).innerHTML = text ? `<div class="alert ${kind}">${esc(text)}</div>` : ''; }
+
+async function api(url, body) {
+  const opt = body === undefined ? {} : {
+    method: 'POST', body: JSON.stringify(body),
+    headers: {'Content-Type': 'application/json', 'X-Requested-With': 'onvif-viewer'}};
+  const r = await fetch(url, opt);
+  let data = {};
+  try { data = await r.json(); } catch (e) {}
+  if (r.status === 401) location.href = '/login';
+  if (!r.ok) throw new Error(data.error || `Errore HTTP ${r.status}`);
+  return data;
+}
+
+async function busy(btn, fn) {
+  const b = $(btn), t = b.textContent;
+  b.disabled = true; b.textContent = 'Attendere…';
+  try { await fn(); } finally { b.disabled = false; b.textContent = t; }
+}
+
+// ---- tab ----
+function showTab() {
+  const tab = (location.hash || '#stato').slice(1);
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('active', s.id === tab));
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
+  if (tab === 'stato') loadStatus();
+  if (tab === 'rete') loadNet();
+}
+window.addEventListener('hashchange', showTab);
+
+// ---- stato ----
+async function loadStatus() {
+  try {
+    const s = await api('/api/status');
+    const up = s.uptime ? `${Math.floor(s.uptime / 3600)} h ${Math.floor(s.uptime % 3600 / 60)} min` : '—';
+    const pl = s.player === 'active' ? '<span class="badge ok">attivo</span>' : `<span class="badge err">${esc(s.player)}</span>`;
+    $('status').innerHTML = `
+      <dt>Player</dt><dd>${pl}</dd>
+      <dt>Telecamera</dt><dd>${esc(s.camera || 'non configurata')}</dd>
+      <dt>Profilo</dt><dd>${esc(s.profile || '—')}</dd>
+      <dt>Stream</dt><dd>${esc(s.stream || '—')}</dd>
+      <dt>IP Raspberry</dt><dd>${esc(s.ips.join(', ') || '—')}</dd>
+      <dt>Temperatura CPU</dt><dd>${s.temperature ? s.temperature.toFixed(1) + ' °C' : '—'}</dd>
+      <dt>Acceso da</dt><dd>${up}</dd>`;
+  } catch (e) { $('status').innerHTML = `<dt>Errore</dt><dd>${esc(e.message)}</dd>`; }
+}
+
+function loadSnapshot() {
+  const img = $('snap');
+  msg('st-msg', '', '');
+  img.onerror = () => { img.hidden = true; msg('st-msg', 'err', 'Anteprima non disponibile (la telecamera potrebbe non supportare gli snapshot ONVIF)'); };
+  img.onload = () => { img.hidden = false; };
+  img.src = '/api/snapshot?t=' + Date.now();
+}
+
+// ---- telecamera ----
+function camForm() {
+  return {host: $('c-host').value.trim(), port: $('c-port').value, username: $('c-user').value.trim(), password: $('c-pass').value};
+}
+
+function doDiscover() {
+  busy('btn-discover', async () => {
+    msg('disc-msg', '', '');
+    try {
+      const {devices} = await api('/api/discover', {});
+      const tb = $('disc-table').querySelector('tbody');
+      tb.innerHTML = '';
+      devices.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.className = 'pick';
+        tr.innerHTML = `<td>${esc(d.host)}</td><td>${esc(d.port)}</td><td>${esc(d.name)}</td><td>${esc(d.hardware)}</td>`;
+        tr.onclick = () => { $('c-host').value = d.host; $('c-port').value = d.port; $('c-user').focus(); };
+        tb.appendChild(tr);
+      });
+      $('disc-table').hidden = !devices.length;
+      msg('disc-msg', devices.length ? 'ok' : 'warn', devices.length
+        ? `Trovati ${devices.length} dispositivi: clicca una riga per selezionarlo`
+        : 'Nessun dispositivo trovato. Verifica che la telecamera sia sulla stessa rete e che ONVIF/WS-Discovery sia attivo.');
+    } catch (e) { msg('disc-msg', 'err', e.message); }
+  });
+}
+
+function doProfiles() {
+  busy('btn-profiles', async () => {
+    msg('prof-msg', '', '');
+    try {
+      const {info, profiles} = await api('/api/profiles', camForm());
+      const sel = $('c-profile');
+      sel.innerHTML = '';
+      profiles.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.token;
+        const res = p.width ? ` · ${p.width}×${p.height}` : '';
+        const enc = p.encoding ? ` · ${p.encoding}` : '';
+        const fps = p.fps ? ` · ${p.fps} fps` : '';
+        o.textContent = `${p.name}${enc}${res}${fps}`;
+        o.dataset.name = p.name;
+        sel.appendChild(o);
+      });
+      const di = $('dev-info');
+      di.innerHTML = Object.entries(info).filter(([, v]) => v).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+      di.hidden = !di.innerHTML;
+      msg('prof-msg', 'ok', `Connesso: ${profiles.length} profili disponibili. Scegli il profilo qui sotto.`);
+    } catch (e) { msg('prof-msg', 'err', e.message); }
+  });
+}
+
+function doSave() {
+  busy('btn-save', async () => {
+    msg('save-msg', '', '');
+    const sel = $('c-profile');
+    const opt = sel.options[sel.selectedIndex];
+    try {
+      const r = await api('/api/camera', {...camForm(),
+        profile_token: sel.value, profile_name: opt ? (opt.dataset.name || opt.textContent.replace(' (attuale)', '')) : '',
+        manual_rtsp: $('c-manual').value.trim(),
+        player: {transport: $('p-transport').value, rotate: $('p-rotate').value,
+                 low_latency: $('p-lowlat').checked, keep_aspect: $('p-aspect').checked, audio: $('p-audio').checked}});
+      msg('save-msg', 'ok', `Salvato. Il monitor mostra ora: ${r.stream}`);
+      $('c-pass').value = '';
+    } catch (e) { msg('save-msg', 'err', e.message); }
+  });
+}
+
+async function doClear() {
+  if (!confirm('Rimuovere la configurazione della telecamera?')) return;
+  await api('/api/camera/clear', {});
+  location.reload();
+}
+
+// ---- rete ----
+async function loadNet() {
+  try {
+    const r = await api('/api/network');
+    netDevices = r.devices;
+    $('n-host').value = r.hostname;
+    const sel = $('n-dev'), cur = sel.value;
+    sel.innerHTML = netDevices.map(d => `<option value="${esc(d.device)}">${esc(d.device)} (${d.type === 'wifi' ? 'Wi-Fi' : 'Ethernet'})</option>`).join('');
+    if (cur) sel.value = cur;
+    fillNet();
+  } catch (e) { msg('net-msg', 'err', e.message); }
+}
+
+function fillNet() {
+  const d = netDevices.find(x => x.device === $('n-dev').value);
+  if (!d) return;
+  $('net-now').innerHTML = `
+    <dt>Stato</dt><dd>${esc(d.state)}${d.connection ? ' · ' + esc(d.connection) : ''}</dd>
+    <dt>MAC</dt><dd>${esc(d.mac || '—')}</dd>
+    <dt>Indirizzo attuale</dt><dd>${esc(d.addresses.join(', ') || '—')}</dd>
+    <dt>Gateway</dt><dd>${esc(d.gateway || '—')}</dd>
+    <dt>DNS</dt><dd>${esc(d.dns.join(', ') || '—')}</dd>`;
+  $('n-method').value = d.method === 'manual' ? 'manual' : 'auto';
+  $('n-addr').value = d.cfg_address || d.addresses[0] || '';
+  $('n-gw').value = d.cfg_gateway || d.gateway || '';
+  $('n-dns').value = d.cfg_dns || d.dns.join(' ');
+  toggleStatic();
+}
+
+function toggleStatic() {
+  const st = $('n-method').value === 'manual';
+  $('n-static').querySelectorAll('input').forEach(i => i.disabled = !st);
+}
+
+function doNet() {
+  const body = {device: $('n-dev').value, method: $('n-method').value,
+                address: $('n-addr').value.trim(), gateway: $('n-gw').value.trim(), dns: $('n-dns').value.trim()};
+  const where = body.method === 'manual' ? `http://${body.address.split('/')[0]}` : "l'indirizzo assegnato dal DHCP (lo vedi sul monitor)";
+  if (!confirm(`Applicare la nuova configurazione a ${body.device}?\nLa connessione si interromperà per qualche secondo; poi riapri ${where}.`)) return;
+  busy('btn-net', async () => {
+    try {
+      const r = await api('/api/network', body);
+      if (r.new_url) {
+        $('net-msg').innerHTML = `<div class="alert ok">Configurazione applicata. Apri <a href="${esc(r.new_url)}">${esc(r.new_url)}</a> tra qualche secondo.</div>`;
+      } else {
+        msg('net-msg', 'ok', "Configurazione applicata. Se l'indirizzo cambia, lo trovi sul monitor o sul router.");
+      }
+    } catch (e) { msg('net-msg', 'err', e.message); }
+  });
+}
+
+async function doHostname() {
+  try { await api('/api/hostname', {hostname: $('n-host').value}); msg('host-msg', 'ok', 'Nome host aggiornato'); }
+  catch (e) { msg('host-msg', 'err', e.message); }
+}
+
+// ---- sistema ----
+async function doPassword() {
+  try {
+    await api('/api/password', {current: $('pw-cur').value, new: $('pw-new').value});
+    msg('pw-msg', 'ok', 'Password cambiata');
+    $('pw-cur').value = $('pw-new').value = '';
+  } catch (e) { msg('pw-msg', 'err', e.message); }
+}
+
+showTab();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+[Unit]
+Description=ONVIF Viewer - visualizzazione telecamera su HDMI
+After=network-online.target systemd-user-sessions.service
+Wants=network-online.target
+Conflicts=getty@tty1.service
+
+[Service]
+Type=simple
+User=onvifview
+Group=onvifview
+SupplementaryGroups=video render audio input
+Environment=HOME=/var/lib/onvif-viewer
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/onvif-viewer/app/player.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+// Consente al servizio ONVIF Viewer (utente onvifview) di modificare la rete,
+// il nome host e di riavviare il Raspberry, senza girare come root.
+polkit.addRule(function (action, subject) {
+    if (subject.user !== "onvifview") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var id = action.id;
+    if (id.indexOf("org.freedesktop.NetworkManager.") === 0 ||
+        id === "org.freedesktop.hostname1.set-hostname" ||
+        id === "org.freedesktop.hostname1.set-static-hostname" ||
+        id.indexOf("org.freedesktop.login1.reboot") === 0 ||
+        id.indexOf("org.freedesktop.login1.power-off") === 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

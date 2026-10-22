@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONVIF Viewer · Accesso</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login">
+<form method="post" class="card login-card">
+  <h1>ONVIF Viewer</h1>
+  <p class="muted">Raspberry Pi 4 · configurazione</p>
+  {% if error %}<div class="alert err">{{ error }}</div>{% endif %}
+  <label>Utente<input name="username" value="admin" autocomplete="username" required></label>
+  <label>Password<input name="password" type="password" autocomplete="current-password" autofocus required></label>
+  <button class="primary" type="submit">Accedi</button>
+</form>
+</body>
+</html>
