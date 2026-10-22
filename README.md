@@ -22,7 +22,7 @@ del Raspberry.
 | Client ONVIF | `app/onvif_client.py` | WS-Discovery, `GetProfiles`, `GetStreamUri`, snapshot. Autenticazione WS-Security digest con compensazione dell'orologio della telecamera e ripiego su HTTP Digest. |
 | Player | `app/player.py` | Avvia `mpv` a schermo intero senza desktop (DRM/KMS). Se lo stream cade riprova ogni 5 s; se la telecamera non è configurata mostra a monitor l'indirizzo dell'interfaccia web. |
 | Interfaccia web | `app/web.py`, `app/templates/` | Login, stato, configurazione telecamera e rete, cambio password, riavvio. |
-| Rete | `app/network.py` | Legge e modifica IP, gateway e DNS di `eth0`/`wlan0` tramite NetworkManager. |
+| Rete | `app/network.py` | Legge e modifica IP, gateway e DNS di `eth0`/`wlan0` e gestisce le reti Wi-Fi tramite NetworkManager. |
 | Servizi | `systemd/`, `polkit/` | Due servizi systemd con un utente dedicato `onvifview` (niente root); una regola polkit gli consente di cambiare la rete e riavviare. |
 
 ## Requisiti
@@ -49,6 +49,10 @@ ONVIF Viewer già installato.
 
 Accessi predefiniti: interfaccia web **admin / admin**; SSH e console **pi / raspberry**
 (la password di `pi` va cambiata al primo accesso). Nome host: `onvif-viewer`.
+Il paese Wi-Fi è impostato su Italia (`WIFI_COUNTRY=IT`).
+
+Al primo avvio serve il cavo di rete per raggiungere l'interfaccia web; da lì puoi
+collegare il Wi-Fi e poi, se vuoi, staccare il cavo.
 
 **Rigenerare l'immagine**: *Actions → Immagine microSD → Run workflow* (puoi scegliere la
 password di `pi` e se attivare SSH), oppure crea un tag `v1.0.1` per avere anche una Release.
@@ -85,10 +89,13 @@ Al riavvio il monitor mostra *"Nessuna telecamera configurata — Configura da h
      e premi *Salva e mostra a monitor*. Il video compare in 2–3 secondi.
    - In alternativa puoi incollare direttamente un URL RTSP nella sezione
      *URL RTSP manuale*: utile per telecamere non ONVIF.
-4. Scheda **Rete**: scegli l'interfaccia, *DHCP* o *IP statico* (formato
+4. Scheda **Rete → Wi-Fi**: *Cerca reti*, clicca la rete, inserisci la password e premi
+   *Connetti*. La rete viene salvata e ricollegata a ogni avvio; le reti salvate si possono
+   rimuovere. Funziona anche per reti nascoste.
+5. Scheda **Rete**: scegli l'interfaccia, *DHCP* o *IP statico* (formato
    `192.168.1.50/24`), gateway e DNS, poi *Applica*. Dopo pochi secondi riapri la pagina al
    nuovo indirizzo.
-5. Scheda **Stato**: stato del player, stream in uso, temperatura, anteprima (snapshot).
+6. Scheda **Stato**: stato del player, stream in uso, temperatura, anteprima (snapshot).
 
 ## Note tecniche
 

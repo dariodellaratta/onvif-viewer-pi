@@ -94,6 +94,31 @@ class NetworkTest(unittest.TestCase):
         self.assertIn("'up' 'Wired connection 1' 'ifname' 'eth0'", log)
 
 
+class WifiTest(unittest.TestCase):
+    def test_scan_and_connect(self):
+        nets = network.wifi_scan()
+        self.assertEqual([n["ssid"] for n in nets], ["Casa:Rossi", "Ufficio", "Ospiti"])
+        self.assertTrue(nets[0]["in_use"])
+        self.assertEqual(nets[1]["signal"], 55)
+        self.assertEqual(nets[2]["security"], "")
+        self.assertEqual(network.wifi_saved(), [{"name": "Casa:Rossi", "active": True},
+                                                {"name": "Vecchia", "active": False}])
+        open(os.environ["FAKE_NMCLI_LOG"], "w").close()
+        network.wifi_connect("Ospiti nuovo", "password123")
+        log = open(os.environ["FAKE_NMCLI_LOG"]).read()
+        self.assertIn("'con-name' 'Ospiti nuovo' 'ssid' 'Ospiti nuovo'", log)
+        self.assertIn("'wifi-sec.psk' 'password123'", log)
+        self.assertIn("'up' 'id' 'Ospiti nuovo'", log)
+        with self.assertRaises(network.NetworkError) as e:
+            network.wifi_connect("Sbagliata", "password123")
+        self.assertIn("password errata", str(e.exception))
+        with self.assertRaises(network.NetworkError):
+            network.wifi_connect("X", "corta")
+        with self.assertRaises(network.NetworkError):
+            network.wifi_forget("Inesistente")
+        network.wifi_forget("Vecchia")
+
+
 class WebTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -165,6 +190,13 @@ class WebTest(unittest.TestCase):
         r = self.post("/api/network", {"device": "eth0", "method": "manual",
                                        "address": "192.168.1.50/24", "gateway": "192.168.1.1"})
         self.assertEqual(r.json["new_url"], "http://192.168.1.50")
+
+        # wifi
+        r = c.get("/api/wifi")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.json["networks"]), 3)
+        r = self.post("/api/wifi/connect", {"ssid": "Casa", "password": "12345678"})
+        self.assertEqual(r.status_code, 200, r.json)
 
         # password web
         self.assertEqual(self.post("/api/password", {"current": "admin", "new": "abc"}).status_code, 400)

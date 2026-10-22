@@ -121,6 +121,23 @@
     <p class="muted">Dopo aver applicato, la pagina va riaperta al nuovo indirizzo. Se lo perdi, l'indirizzo corrente è sempre scritto sul monitor quando non c'è una telecamera configurata.</p>
   </div>
   <div class="card">
+    <h2>Wi-Fi</h2>
+    <p class="muted">Collega il Raspberry a una rete Wi-Fi. Puoi restare collegato anche via cavo: dopo la connessione il nuovo indirizzo Wi-Fi compare in <i>Interfaccia</i> qui sopra e sul monitor.</p>
+    <button id="btn-wscan" onclick="doWifiScan()">Cerca reti</button>
+    <div id="wifi-msg"></div>
+    <table id="wifi-table" hidden>
+      <thead><tr><th>Rete</th><th>Segnale</th><th>Sicurezza</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="grid">
+      <label>Nome rete (SSID)<input id="w-ssid" autocomplete="off"></label>
+      <label>Password<input id="w-pass" type="password" autocomplete="new-password" placeholder="vuota per reti aperte"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="w-hidden"> Rete nascosta</label>
+    <div class="row"><button class="primary" id="btn-wconn" onclick="doWifiConnect()">Connetti</button></div>
+    <div id="wifi-saved"></div>
+  </div>
+  <div class="card">
     <h2>Nome host</h2>
     <div class="row">
       <input id="n-host" style="flex:1">
@@ -337,6 +354,53 @@ function doNet() {
       }
     } catch (e) { msg('net-msg', 'err', e.message); }
   });
+}
+
+function renderSaved(saved) {
+  const el = $('wifi-saved');
+  if (!saved || !saved.length) { el.innerHTML = ''; return; }
+  el.innerHTML = '<p class="muted">Reti salvate</p>' + saved.map(c =>
+    `<div class="row"><span style="flex:1">${esc(c.name)} ${c.active ? '<span class="badge ok">connessa</span>' : ''}</span>` +
+    `<button class="danger" data-name="${esc(c.name)}" onclick="doWifiForget(this.dataset.name)">Rimuovi</button></div>`).join('');
+}
+
+function doWifiScan() {
+  busy('btn-wscan', async () => {
+    msg('wifi-msg', '', '');
+    try {
+      const r = await api('/api/wifi');
+      const tb = $('wifi-table').querySelector('tbody');
+      tb.innerHTML = '';
+      r.networks.forEach(n => {
+        const tr = document.createElement('tr');
+        tr.className = 'pick';
+        tr.innerHTML = `<td>${esc(n.ssid)} ${n.in_use ? '<span class="badge ok">connessa</span>' : ''}</td><td>${esc(n.signal)}%</td><td>${esc(n.security || 'aperta')}</td>`;
+        tr.onclick = () => { $('w-ssid').value = n.ssid; $('w-pass').focus(); };
+        tb.appendChild(tr);
+      });
+      $('wifi-table').hidden = !r.networks.length;
+      if (!r.networks.length) msg('wifi-msg', 'warn', 'Nessuna rete trovata');
+      renderSaved(r.saved);
+    } catch (e) { msg('wifi-msg', 'err', e.message); }
+  });
+}
+
+function doWifiConnect() {
+  busy('btn-wconn', async () => {
+    msg('wifi-msg', '', '');
+    try {
+      await api('/api/wifi/connect', {ssid: $('w-ssid').value, password: $('w-pass').value, hidden: $('w-hidden').checked});
+      $('w-pass').value = '';
+      msg('wifi-msg', 'ok', `Connesso a ${$('w-ssid').value}. Il Raspberry si ricollegherà da solo a ogni avvio.`);
+      loadNet();
+    } catch (e) { msg('wifi-msg', 'err', e.message); }
+  });
+}
+
+async function doWifiForget(name) {
+  if (!confirm(`Rimuovere la rete ${name}? Se sei collegato tramite questa rete perderai la connessione.`)) return;
+  try { await api('/api/wifi/forget', {name}); doWifiScan(); }
+  catch (e) { msg('wifi-msg', 'err', e.message); }
 }
 
 async function doHostname() {

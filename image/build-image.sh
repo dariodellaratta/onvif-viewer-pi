@@ -14,6 +14,7 @@
 #   PI_PASSWORD  sua password (default: raspberry, va cambiata al primo accesso)
 #   ENABLE_SSH   1 = SSH attivo (default), 0 = disattivo
 #   HOSTNAME_PI  nome host (default: onvif-viewer)
+#   WIFI_COUNTRY paese per le frequenze Wi-Fi (default: IT)
 #   EXTRA_MB     spazio aggiunto alla partizione per i pacchetti (default: 1536)
 #   NO_XZ        1 = non comprimere il risultato
 set -euo pipefail
@@ -26,6 +27,7 @@ PI_USER="${PI_USER:-pi}"
 PI_PASSWORD="${PI_PASSWORD:-raspberry}"
 ENABLE_SSH="${ENABLE_SSH:-1}"
 HOSTNAME_PI="${HOSTNAME_PI:-onvif-viewer}"
+WIFI_COUNTRY="${WIFI_COUNTRY:-IT}"
 EXTRA_MB="${EXTRA_MB:-1536}"
 
 [ "$(id -u)" -eq 0 ] || { echo "Esegui come root (sudo)"; exit 1; }
@@ -151,6 +153,15 @@ chroot "$ROOT" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME=/root LAN
 
 rm -f "$ROOT/usr/sbin/policy-rc.d" "$ROOT/etc/resolv.conf"
 [ -n "$RESOLV_BAK" ] && mv "$RESOLV_BAK" "$ROOT/etc/resolv.conf"
+
+# Wi-Fi: imposta il paese (come fa raspi-config) e sblocca la radio, che su
+# Raspberry Pi OS Lite resta bloccata finché il paese non è configurato.
+if [ -f "$BOOT/cmdline.txt" ] && ! grep -q "ieee80211_regdom" "$BOOT/cmdline.txt"; then
+    sed -i "1 s/\$/ cfg80211.ieee80211_regdom=$WIFI_COUNTRY/" "$BOOT/cmdline.txt"
+fi
+for f in "$ROOT"/var/lib/systemd/rfkill/*:wlan; do
+    [ -e "$f" ] && echo 0 > "$f"
+done
 
 # File informativo visibile anche da Windows nella partizione di boot
 cat > "$BOOT/onvif-viewer.txt" <<EOF

@@ -228,6 +228,37 @@ def api_network_set():
     return jsonify(ok=True, connection=conn, new_url=new_url)
 
 
+@app.get("/api/wifi")
+@login_required
+def api_wifi_scan():
+    try:
+        return jsonify(networks=network.wifi_scan(), saved=network.wifi_saved())
+    except network.NetworkError as e:
+        return jsonify(error=str(e)), 400
+
+
+@app.post("/api/wifi/connect")
+@login_required
+def api_wifi_connect():
+    d = request.get_json(force=True)
+    try:
+        name = network.wifi_connect(d.get("ssid", ""), d.get("password", ""),
+                                    bool(d.get("hidden")))
+    except network.NetworkError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(ok=True, connection=name)
+
+
+@app.post("/api/wifi/forget")
+@login_required
+def api_wifi_forget():
+    try:
+        network.wifi_forget(request.get_json(force=True).get("name", ""))
+    except network.NetworkError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(ok=True)
+
+
 @app.post("/api/hostname")
 @login_required
 def api_hostname():

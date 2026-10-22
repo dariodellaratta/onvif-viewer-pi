@@ -6,7 +6,15 @@ log = os.environ["FAKE_NMCLI_LOG"]
 with open(log, "a") as f:
     f.write(" ".join(repr(x) for x in a) + "\n")
 s = " ".join(a)
-if "device status" in s:
+if "wifi list" in s:
+    print("*:Casa\\:Rossi:72:WPA2\n :Ufficio:55:WPA2 WPA3\n :Ufficio:40:WPA2\n ::30:WPA2\n :Ospiti:20:")
+elif a[-2:] == ["Ufficio", "id"] or (len(a) > 2 and a[-3:] == ["up", "id", "Sbagliata"]):
+    print("Error: Secrets were required, but not provided.", file=sys.stderr); sys.exit(4)
+elif "radio" in a or "add" in a or "delete" in a or ("up" in a and "--wait" in a):
+    pass
+elif "NAME,TYPE,DEVICE" in s:
+    print("Wired connection 1:802-3-ethernet:eth0\nCasa\\:Rossi:802-11-wireless:wlan0\nVecchia:802-11-wireless:")
+elif "device status" in s:
     print("eth0:ethernet:connected:Wired connection 1\nwlan0:wifi:disconnected:\nlo:loopback:unmanaged:")
 elif "device show eth0" in s:
     print("IP4.ADDRESS[1]:192.168.1.23/24\nIP4.GATEWAY:192.168.1.1\nIP4.DNS[1]:192.168.1.1\nGENERAL.HWADDR:DC:A6:32:00:00:01")

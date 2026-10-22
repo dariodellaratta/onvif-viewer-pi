@@ -9,6 +9,9 @@ on:
       enable_ssh:
         description: "SSH attivo (1/0)"
         default: "1"
+      wifi_country:
+        description: "Paese Wi-Fi (codice ISO, es. IT)"
+        default: "IT"
   push:
     tags: ["v*"]
 
@@ -38,6 +41,7 @@ jobs:
         env:
           PI_PASSWORD: ${{ github.event.inputs.pi_password || 'raspberry' }}
           ENABLE_SSH: ${{ github.event.inputs.enable_ssh || '1' }}
+          WIFI_COUNTRY: ${{ github.event.inputs.wifi_country || 'IT' }}
         run: sudo -E ./image/build-image.sh
 
       - name: Pubblica come artifact
